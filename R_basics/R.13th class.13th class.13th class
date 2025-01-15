@@ -1,0 +1,58 @@
+=======================
+install miktex using admin only
+library(datasets)
+library(dataMaid)
+attach(mtcars)
+makeDataReport(
+mtcars,
+output = "html",
+replace = TRUE)
+=======================
+
+dim(mtcars)
+latex install
+create a dataframe consisting 3 vectors a,b,c of all same lengths, 2 are characters and 3 is number
+mdf<-data.frame(a<-c("john","tom","roff","amal","jerry","tom","roff"),
+b<-c("A","B","E","F","A","R","B"),
+c<-101:107)
+mdf
+
+str(mdf)
+sapply(mdf,class)
+
+library(data.table)
+mdt<-data.table(a<-1:10, b<-21:30,c<-31:40)
+sapply(mdt,class)
+===================================
+
+write a function to compute the power of x till the length of the vector x.
+
+powfun<- function(x){
+x^(1:length(x))
+}
+powfun(2:7)
+===================================
+
+write a function to compute moving average.
+
+MA <-function(x){
+n<-length(x)
+(x[1:(n-2)] + x[2:(n-1)] + x[3:n] )/3
+}
+square bracket is used to pull out subsetting, to pull out some values of a set.
+
+MA <-function(x){
+n<-length(x)
+(x[4:(n-5)] + x
+
+what do you mean by cross sectional data and time series data(parallel data)
+
+what is cross sectional data.
+-> 
+
+ts stands for time series. 
+
+library()
+data(lynx)
+attach(lynx)
+View(lynx)
