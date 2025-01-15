@@ -1,0 +1,382 @@
+---
+title: "2023MDTS07ALA003_imageDS"
+author: "Amal Vinob"
+date: "2024-10-05"
+output:
+  html_document: default
+  pdf_document: default
+Programme: MSc Data Science
+submitted to: K A Venkatesh SIR
+Reg_number: 2023MDTS07ALAOO3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Set
+
+  The dataset contain images of Animals, Fruits and Vegetables.The task is to classify and cluster these images based on visual features.The dataset contain main 3 feature.
+
+1. Animals - This folder contain images of domestic and wild animals.
+2. Fruits - This folder contain images of various fruits.
+3. vegetables - This folder contain images of various vegetables.
+
+
+# importing libraries
+
+```{r}
+suppressPackageStartupMessages({
+  suppressWarnings({
+    library(magick)
+    library(ggplot2)
+    library(imager)
+    library(dplyr)
+    library(caret)
+    
+    library(hopkins)
+    library(clustertend)
+    library(cluster)
+    library(factoextra)
+    library(dbscan)
+    
+    library(neuralnet)
+    library(tidyverse)
+    library(GGally)
+  })
+})
+```
+
+
+# Getting Dataset
+
+Each image is resized into  28*28 pixels and convert into gray scale for uniformality. And having 10 % favorite image (my favorite animal is Dog).Favorite animal is labeled as 1 and others as 0.Contain a total of 325 image and contain 786 (784 is pixel value , favorite animal, category (animal, fruits, vegetables)). 
+
+```{r}
+
+animal_path <- "D:/alliance/3rd sem/machine learning_2/DATASET/img_DS_1/img_DS/Animal"
+fruit_path <- "D:/alliance/3rd sem/machine learning_2/DATASET/img_DS_1/img_DS/Fruits"
+vegitable_path <- "D:/alliance/3rd sem/machine learning_2/DATASET/img_DS_1/img_DS/vegetable"
+
+
+
+img_path <- list(animal_path, fruit_path, vegitable_path)
+img_path
+
+
+
+df <- data.frame(matrix = numeric(), favorite = integer(), category = character(), stringsAsFactors = FALSE)
+
+
+```
+
+
+## preprocessing
+
+Each image is processed as follows,
+
+1. Image Rescaling - the image is resized into 28x28 pixel using magick library.
+2. Gray scaling - image is converted into grayscale image.
+3. data reshaping - each grayscale image is reshaped into 784 1d vector
+4. scaling : all pixel is standardized using scale().
+
+```{r}
+for (paths in img_path){
+  image_file <- list.files(paths, recursive = TRUE, full.names = TRUE)
+  
+  for (image in image_file){
+    img <- image_read(image)
+    img <- image_resize(img, "28x28!")
+    
+    img_gray <- image_convert(img, colorspace="gray")
+    
+    img_data <- image_data(img_gray)
+    
+    img_matrix <- as.numeric(as.matrix(img_data))
+    
+    if(grepl("dog \\([0-9]+\\)",image)){
+      label <- 1
+    }else{
+      label <- 0
+    }
+    
+    category <- basename(paths)
+    
+    df <- rbind(df, c(img_matrix, favorite = label, category = category))
+    
+  }
+}
+
+
+print(dim(df))
+str(df)
+
+
+```
+
+
+```{r}
+colnames(df) <- c(paste0("pixel", 1:784), "favorite", "category")
+
+df$favorite <- as.factor(df$favorite)
+df$category <- as.factor(df$category)
+df$category <- as.numeric(df$category)
+
+
+```
+
+## Partitioning the data
+
+```{r}
+
+set.seed(45)
+train_index <- createDataPartition(df$favorite, p = .7, list=FALSE)
+train_data <- df[train_index, ]
+test_data <- df[-train_index, ]
+
+```
+
+## creating a sample Logistic Regression Model
+
+```{r}
+#model <- glm(favorite~., data = train_data, family = binomial)
+
+#summary(model)
+
+```
+because of higher dimention it is hard to train so we use pca to reduce the dimentionality.
+
+
+
+## PCA
+```{r}
+train_data[, !names(train_data) %in% c("favorite", "category")] <- lapply(train_data[, !names(train_data) %in% c("favorite", "category")], as.numeric)
+test_data[, !names(train_data) %in% c("favorite", "category")] <- lapply(test_data[, !names(train_data) %in% c("favorite", "category")], as.numeric)
+
+
+scale_train <- scale(train_data[, !names(train_data) %in% c("favorite", "category")])
+scale_test <- scale(test_data[, !names(train_data) %in% c("favorite", "category")])
+
+pca_tr <- prcomp(scale_train, center = FALSE, scale = FALSE)
+
+#sample pca result
+pca_tr$x[1:5,1:15]
+
+```
+
+
+```{r}
+train_df <- data.frame(pca_tr$x[,1:50], favorite = train_data$favorite)
+train_df$category <- train_data$category
+
+test_df <- as.data.frame(predict(pca_tr, newdata = scale_test)[, 1:50])
+test_df$favorite <- test_data$favorite
+test_df$category <- test_data$category
+
+dim(train_df)
+dim(test_df)
+
+```
+
+# part A
+
+# Logistic Regrission Model
+```{r}
+model <- glm(favorite~., data = train_df, family = binomial)
+
+summary(model)
+```
+
+## Accuracy
+```{r}
+y_predict <- predict(model, newdata = test_df, type = "response")
+predict_label <- ifelse(y_predict > 0.5, 1 , 0)
+
+table(predict = predict_label, actual = test_df$favorite)
+
+accuracy <- mean(predict_label == test_data$favorite)
+accuracy
+```
+
+
+```{r}
+data.frame(predict_label, test_df$favorite)
+```
+
+Since the Favorite animal constitues only 10% of the dataset, this introduce significant class inbalance. This imbalance means that the model may endup biased towards predicting the non favorite class.
+
+
+
+
+# Part B
+# Clustering
+
+
+```{r}
+df[, !names(df) %in% c("favorite", "category")] <- lapply(df[, !names(df) %in% c("favorite", "category")], as.numeric)
+scaled_df <-scale(df[, !names(df) %in% c("favorite", "category")])
+
+dim(scaled_df)
+
+```
+
+
+```{r}
+#clusterable ???
+set.seed(123)
+hopkinsts <- hopkins(scaled_df, n=nrow(scaled_df)-1)
+print(hopkinsts)
+
+```
+
+The Hopkins statistic is used to assess the cluster tendency of a dataset, i.e., whether the data contains meaningful clusters or if the data points are randomly distributed. The value of the Hopkins statistic ranges from 0 to 1:
+
+A value close to 1  indicates that the dataset is highly clustered and not random.
+A value close to 0.5 suggests that the data is uniformly distributed or random and does not exhibit cluster structure.
+A value close to 0 would indicate anti-clustering or regular spacing between points.
+
+Hopkins value is less that .5 which indicate this dataset is not good for clustering.
+
+Anyway we will try doing clustering.
+
+
+
+## k-means Cluster
+
+```{r}
+km <- kmeans(scaled_df, centers = 3, nstart = 25)
+
+fviz_cluster(km,data = scaled_df, geom = "point")
+```
+
+
+```{r}
+km$cluster
+df$category <- as.factor(df$category)
+df$category <- as.numeric(df$category)
+df$category
+
+table(km$cluster, df$category)
+```
+
+## using pca
+
+```{r}
+pca_tr <- prcomp(scaled_df, center = FALSE, scale = FALSE)
+
+scaled_df_ <- data.frame(pca_tr$x[,1:50])
+
+hopkinsts <- hopkins(scaled_df_, n=nrow(scaled_df_)-1)
+print(hopkinsts)
+
+km <- kmeans(scaled_df_, centers = 3, nstart = 25)
+
+fviz_cluster(km,data = scaled_df_, geom = "point")
+
+table(km$cluster, df$category)
+
+```
+
+we tried to Cluster using category (animals, fruits and vegetable), but the  result suggest that clusters are not seperated according to categories, and shows some degree of overlaping across the categories. 
+cluster 1 has a majority of 3rd item.  but still contain 9 animals, 33 fruits and 42 vegetables together.
+cluster 2 has a majority of animals.
+
+
+## Hierarchical Clustering
+```{r}
+hc1 <- hclust(dist(scaled_df), method = "ward.D2")
+plot(hc1)
+clusters <- cutree(hc1, k = 3)
+
+table(clusters, df$category)
+
+```
+
+cluster 1 almost equally contain all category
+cluster 2 has majority of category animals.
+cluster 3 has majority of 3rd category vegetables
+
+
+
+## DBSCAN
+```{r}
+kNNdistplot(x = scaled_df, k = 5)
+abline(h = 28, col="black")
+```
+
+knndistplot shows that the eps(radius = 30) if we reduce it we will get a lot of outliers.
+no proper cluster.
+
+
+```{r}
+dbs <- dbscan(scaled_df, eps = 30, minPts = 3)
+table(dbs$cluster, df$category)
+fviz_cluster(dbs, data=scaled_df,geom = "point")
+```
+
+we used dbscan to cluster, 
+cluster 0  represents the noise points.
+Mainly 1 cluster is there which contain almost all the image.
+
+
+
+# Part c
+# ANN 
+
+## ANN with 1 hiddenlayer and  5 Neurons
+```{r}
+
+netlayer <- c(5)
+net.network <-neuralnet(favorite ~ . , train_df, hidden = netlayer, threshold =  0.01)
+plot(net.network)
+
+nn.predict <- predict(net.network, test_df[, !names(test_df) %in% 'favorite'])
+predicted_class <- ifelse(nn.predict[,1] >.5, 1, 0)
+confusion_matrix <- table(predicted = predicted_class, actual = test_df$favorite)
+accuracy <-sum(diag(confusion_matrix)) / sum(confusion_matrix)
+accuracy
+
+```
+
+## ANN with 1 hiddenlayer and  10 Neurons
+```{r}
+netlayer <- c(10)
+net.network <-neuralnet(favorite ~ . , train_df, hidden = netlayer, threshold =  0.01)
+plot(net.network)
+
+nn.predict <- predict(net.network, test_df[, !names(test_df) %in% 'favorite'])
+predicted_class <- ifelse(nn.predict[,1] >.5, 1, 0)
+confusion_matrix <- table(predicted = predicted_class, actual = test_df$favorite)
+accuracy <-sum(diag(confusion_matrix)) / sum(confusion_matrix)
+accuracy
+```
+
+
+## ANN with 1 hiddenlayer and  20 Neurons
+```{r}
+netlayer <- c(20)
+net.network <-neuralnet(favorite ~ . , train_df, hidden = netlayer, threshold =  0.01)
+
+nn.predict <- predict(net.network, test_df[, !names(test_df) %in% 'favorite'])
+predicted_class <- ifelse(nn.predict[,1] >.5, 1, 0)
+confusion_matrix <- table(predicted = predicted_class, actual = test_df$favorite)
+accuracy <-sum(diag(confusion_matrix)) / sum(confusion_matrix)
+accuracy
+```
+
+
+# comparison
+
+Both the logistic Regression and ANN model with different configuration achived accuracy of 89.69%. 
+```{r}
+
+netlayer <- c(10,20,5)
+net.network <-neuralnet(favorite ~ . , train_df, hidden = netlayer, threshold =  0.01)
+
+nn.predict <- predict(net.network, test_df[, !names(test_df) %in% 'favorite'])
+predicted_class <- ifelse(nn.predict[,1] >.5, 1, 0)
+confusion_matrix <- table(predicted = predicted_class, actual = test_df$favorite)
+accuracy <-sum(diag(confusion_matrix)) / sum(confusion_matrix)
+accuracy
+```
+

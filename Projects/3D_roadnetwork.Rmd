@@ -1,0 +1,284 @@
+---
+title: "Clustering on 3D Road Network"
+author: "Amal Vinob"
+date: "2024-09-16"
+output:
+  pdf_document: default
+  html_document: default
+Programme: MSc Data Science
+submitted to: K A Venkatesh SIR
+Reg_number: 2023MDTS07ALAOO3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 3D Road Network (North Jutland, Denmark)
+### About the Dataset
+
+This dataset contains the detailed information about the road network in North Jutland, Denmark including logitude, latitude and altitude for road segmentation.
+  key features:
+      OSM_ID : Unique identifier for road segments from OpenStreetMap
+      longitude,latitude,altitude : Representing the geographycal location and elevation of each road segment.
+
+
+
+## Loading libraries
+```{r}
+suppressPackageStartupMessages({
+  suppressWarnings({
+    library(dplyr)
+    library(ggplot2)
+    library(cluster)
+    library(factoextra)
+    library(corrplot)
+    library(dendextend)
+    library(gridExtra)
+    library(scatterplot3d)
+    library(purrr)
+    library(hopkins)
+  })
+})
+```
+
+## Loading the Dataset
+```{r}
+setwd("D:/alliance/3rd sem/machine learning_2/R_studo/datasets")
+data <- readLines("3D_spatial_network.txt")
+head(data)
+
+splited <- strsplit(data, split = ",")
+
+splited <- do.call(rbind, splited)
+df <- as.data.frame(splited, stringAsFactor= FALSE)
+
+colnames(df) <- c("OSMID", "longitude", "Latitude", "Altitude")
+
+df[] <- lapply(df, function(x) as.numeric(x))
+head(df)
+
+```
+## EDA
+
+
+## Summary Statistics
+
+```{r}
+str(df)
+
+summary(df)
+
+print(sum(is.na(df)))
+```
+
+
+### Distribution of the Varibales
+
+```{r}
+long <- ggplot(data = df, aes(x = longitude)) + geom_histogram(binwidth = .3 ,fill= "steelblue", color= "black") + 
+                labs(title = "Distribution of longitude ", xlab="longitude", ylab = "count")
+
+lati <- ggplot(data = df, aes(x = Latitude)) + geom_histogram(binwidth = .2 ,fill= "steelblue", color= "black") + 
+                labs(title = "Distribution of Latitude ", xlab="Latitude", ylab = "count")
+
+alti <- ggplot(data = df, aes(x = Altitude)) + geom_histogram(binwidth = 5 ,fill= "steelblue", color= "black") + 
+                labs(title = "Distribution of Altitude ", xlab="Altitude", ylab = "count")
+
+grid.arrange(long, lati, alti, nrow=2, ncol=2)
+
+```
+
+#### Longitude distribution
+ The distribution of the longitude values centered around 10 degree. majority of the road segment falls between 9.5 and 10.5
+ 
+#### Latitude distribution
+ The latitude vales are distribution between approximatily 56.5 and 57.6. The distribution shows a slight peak in between 56.8 and 57.2, indicating tat most road network is located in this range
+ 
+#### Altitude distribution
+  The altitude value range from -8 to 134 meter (height).
+  The Diststibution is Right skewed, with majority of the values concentrated on the left side below 50. Indicating that most road network are in low lying area
+  A small number of road above 100 meters indicating there are some high altitude regions.
+  
+
+
+## correlation  analysis
+
+```{r}
+corr <- cor(df)
+corr
+
+corrplot(corr, method = "pie", type = "lower")
+
+```
+
+### Outlier detection
+
+```{r}
+ggplot(data=df, aes(x="", y =  longitude), color="blues") + geom_boxplot(fill = "lightblue", color= "black") + 
+                    labs(title="box plot for longitude", x = "Longitude") + theme_minimal()
+
+ggplot(data = df, aes(x = "", y = Latitude)) + 
+                    geom_boxplot(fill = "steelblue", color = "black")+
+                    labs(title  = "Boxplot of Latitude", x = "Latitude") + theme_minimal()
+                    
+
+ggplot(data = df, aes(x = "", y = Altitude)) + 
+                    geom_boxplot(fill = "steelblue", color = "black")+
+                    labs(title  = "Boxplot of Altitude", x = "Altitude") + theme_minimal()
+                    
+```
+according to the boxplot Altitude variable in our dataset exhibits significant outliers, as evidenced by the high spread in values beyond the usual range of the data.
+
+### removing outliers from the Altitude
+```{r}
+q1 <- quantile(df$Altitude, 0.25)
+q3 <- quantile(df$Altitude, 0.75)
+IQR <- q3 - q1
+
+lower_bound <- q1 - IQR * 1.5
+upper_bound <- q3 + IQR * 1.5
+
+cleaned_data <-subset(df, Altitude >= lower_bound & Altitude <= upper_bound)
+print(dim(df))
+print(dim(cleaned_data))
+```
+
+
+
+
+```{r}
+ggplot(data = df , aes(x= longitude, y =Latitude)) + geom_point(aes(color = Altitude)) + ggtitle("geographical Distribution of the road")
+```
+
+
+```{r}
+#scatterplot3d(df$longitude, df$Latitude, df$Altitude, pch = 19)
+
+```
+
+## Preprocessesisng 
+
+### Remove null values
+
+```{r}
+print(sum(is.na(df)))
+df <- na.omit(df)
+```
+
+### Data scaling/ Normalization
+
+```{r}
+Scaled_df <- scale(cleaned_data[, c("longitude", "Latitude", "Altitude")])
+head(Scaled_df)
+```
+
+### Distance matrix
+```{r}
+sample_df <- Scaled_df[sample(nrow(Scaled_df), size = 5000),]
+#dist_df <- dist(sample_df)
+
+```
+
+
+## dataset is clusterable or not
+
+```{r}
+hopkins(sample_df, nrow(sample_df)-1)
+```
+The Hopkins statistic is used to assess the cluster tendency of a dataset, i.e., whether the data contains meaningful clusters or if the data points are randomly distributed. The value of the Hopkins statistic ranges from 0 to 1:
+
+A value close to 1 (like your result of 0.999) indicates that the dataset is highly clustered and not random.
+A value close to 0.5 suggests that the data is uniformly distributed or random and does not exhibit cluster structure.
+A value close to 0 would indicate anti-clustering or regular spacing between points.
+
+Since the Hopkins statistic is very high, this strongly indicates that the dataset has a highly clustered structure, making it very suitable for clustering techniques like k-means or hierarchical clustering. The high value confirms that there are distinct groups or clusters within your 3D road spatial data.
+
+
+
+```{r}
+k1 <- kmeans(x = sample_df, centers = 2, nstart = 25)
+k2 <- kmeans(x = sample_df, centers = 4, nstart = 25)
+k3 <- kmeans(x = sample_df, centers = 6, nstart = 25)
+k4 <- kmeans(x = sample_df, centers = 8, nstart = 25)
+
+p1 <- fviz_cluster(k1, data = sample_df, geom = "point") + ggtitle("k=1")
+p2 <- fviz_cluster(k2, data=sample_df, geom = "point") + ggtitle("k = 2")
+p3 <- fviz_cluster(k3, data=sample_df, geom = "point") + ggtitle("k = 3")
+p4 <- fviz_cluster(k4, data=sample_df, geom = "point") + ggtitle("k = 4")
+
+p1
+p2
+p3
+p4
+```
+
+## Find the best cluster using Elbow method
+```{r}
+
+set.seed(123)
+wss <- function(k){
+  kmeans(sample_df, k ,nstart = 25)$tot.withinss
+}
+
+k.values <- 1:15
+
+wss_values <- map_dbl(k.values, wss)
+
+plot(k.values, wss_values, type = "b", pch=19, frame=FALSE, xlab = "No. of Clusters",ylab="Total Within- Cluster sum of squares")
+
+```
+### best cluster
+
+From the above elbow method to find the optimal number of clusters for the 3D road spatial data by plotting the within- cluster sum of squares(WSS) against the number of cluster(k).The WSS represents the total variance within clusters, and the goal is to minimize this value.
+The plot above shows how the WSS decrease as the number of clusters increases.The "elbow" in the plot indicates where adding more cluster results in diminishing improvements to the WSS. In this the elbow occurs at  clusters, suggesting that 5 is the optimal number of cluster for this Dataset.
+
+```{r}
+
+k1 <- kmeans(x = sample_df, centers = 5, nstart = 25)
+p1 <- fviz_cluster(k1, data = sample_df, geom = "point") + ggtitle("k=5")
+p1
+```
+
+
+## hierarchical clustering
+
+Doing some hierarchical clustering in this dataset.
+
+```{r}
+dist_df <- dist(sample_df)
+hc_clust_1 <- hclust(dist_df, method = "ward.D2")
+fviz_dend(hc_clust_1, cex=.5)
+
+```
+
+```{r}
+hc_clust_2 <- hclust(dist_df, method = "average")
+hc_clust_3 <- hclust(dist_df, method = "ward.D")
+hc_clust_4 <- hclust(dist_df, method = "single")
+hc_clust_5 <- hclust(dist_df, method = "complete")
+hc_clust_6 <- hclust(dist_df, method = "centroid")
+
+# or
+
+den1 <- sample_df %>% dist %>% hclust("average") %>% as.dendrogram
+den2 <- sample_df %>% dist %>% hclust("ward.D") %>% as.dendrogram
+den3 <- sample_df %>% dist %>% hclust("single") %>% as.dendrogram
+den4 <- sample_df %>% dist %>% hclust("complete") %>% as.dendrogram
+den5 <- sample_df %>% dist %>% hclust("centroid") %>% as.dendrogram
+den6 <- sample_df %>% dist %>% hclust("ward.D2") %>% as.dendrogram
+
+dend_list <- dendlist("average" = den1, "ward.D" = den2,
+                      "single" = den3, "complete" = den4,
+                      "centroid" = den5, "ward.D2" = den6)
+
+corre <-round(cor.dendlist(dend_list), 2)
+corre
+
+```
+
+
+# conclusion
+
+In this Dataset, the clustering of road segments based on 3D spatial data(longitude, latitude and altitude) provides insights into how road segments are grouped based ib their geographic location and elevation. by identifiying clusters, we can draw conclusion about similar road characteristics across different region. this information is vital for urban plannersm traffic management system, and navigation tools, as it allows for better decision making related to road maintanance, trafficflow, and route optimization.
+

@@ -1,0 +1,446 @@
+---
+title: "Haberman survival"
+author: "Amal Vinob"
+date: "3/sep/2024"
+output:
+  html_document: default
+  pdf_document: default
+Programme: MSc Data Science
+submitted to: K A Venkatesh SIR
+Reg_number: 2023MDTS07ALAOO3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+```
+
+## Breast Cancer survival Dataset
+
+
+### About the dataset
+
+The dataset is designed to analyse the factors that are infulencing the breast cancer survival rate.
+It includes- Age, Patients year of operation, number of positive auxilary nodes and survival status
+  
+  1. Age of patient at time of operation : This numerical attribute represent the age of the patient when they underwent      surgery.
+  2. Patients year of operation : The Numerical attribute represent the year at which the patient underwent surgery and      it is substrated by 1900, the adjustment simplifies the dataset by focusing on year rather than a full four year       date.
+  3. Number of positive axillary nodes Decteted : this Numerical value represent the count of Axillary lymph nodes that tested positive for  cancer.A higher number of positive nodes typically signifies a more advanced stage of cancer.
+  4. Survival status : patient survival outcome
+    1. the patient survived 5 yeats or longer after the operation.
+    2. The patienct died within 5 years of the operation
+
+
+
+
+## Loading Libraries
+```{r}
+suppressPackageStartupMessages({
+  suppressWarnings({
+    library(dplyr)
+    library(ggplot2)
+    library(mlbench)
+    library(neuralnet)
+    library(corrplot)
+    library(caret)
+    library(gridExtra)
+  })
+})
+```
+
+
+
+### DATASET
+```{r cars}
+url <- 'http://archive.ics.uci.edu/ml/machine-learning-databases/haberman/haberman.data'
+haberman <- read.csv(url, header = FALSE)
+df<- haberman
+col_name <- c("Age", "Year", "Node", "survival_status")
+colnames(df) <-col_name
+head(df)
+```
+```{r}
+str(df)
+summary(df)
+```
+
+From here we can say that there are outliers in nodes because the median is 1 and the max is 52 or mean is 4 and max is 52.
+
+
+## EDA - Exploratory Data Analysis
+
+### Distribution of each Variable
+```{r}
+p1 <- ggplot(df, aes(x = Age)) + 
+    geom_histogram(binwidth = 5, fill = "steelblue", color="black")+
+    labs(title = "Distribution of patients AGE ",
+         x= "Age",
+         y= "Count")
+
+p2 <- ggplot(df, aes(x = Node)) + 
+    geom_histogram(binwidth = 5, fill = "grey", color="black")+
+    labs(title = "Distribution of patients Node ",
+         x= "Node",
+         y= "Count")
+
+p3 <- ggplot(df, aes(x = Year)) + 
+    geom_histogram(binwidth = 1, fill = "orange", color="black")+
+    labs(title = "Distribution of year of operations ",
+         x= "Year",
+         y= "Count")
+
+p4 <- ggplot(df, aes(x = Node , fill = factor(survival_status))) + 
+    geom_histogram(binwidth = 1, color="black")+
+    labs(title = "Distribution of patients Node with respect to Survival ",
+         x= "Node",
+         y= "Count")
+grid.arrange(p1, p2, p3, p4, nrow=2, ncol=2)
+    
+```
+
+Distribution of Age : A histogram showing the age distribution of the patient. The Distribution appiears to be Roughly normalwith most patient aged between 50 and 65.
+
+Distribution of patient Axillary Node : A histogram shows the number of positive lymph node dectected in patient.The distribution is highly skewed to the right With most patient less than 5 positive node.
+
+Distribution of year of operation : The histogram showing the year which patient underwent operations. The distribution looks fairly evenly distributed. 1957 - 1970.
+
+Distribution of Node with respect to survival status : A hsitogram represrent the dsitribution of the positive lymph node categoriced by survival status.Most patients have a low number of node, but this histogram differentiate between survival outcome.
+
+
+
+### Boxplot
+
+```{r}
+ggplot(df, aes(x = factor(survival_status), y = Age, fill = factor(survival_status))) + 
+    geom_boxplot()+
+    labs(title = "Survival status by Age",
+         x = "Survival",
+         y = "Age")+ 
+    scale_fill_manual(values = c("red", "green"), labels = c("Died within 5 years", "survived 5 years or more than 5 years"))
+```
+
+BoxPlot : The box plot shows whether there are outliers in age with respect to survivial status. The plot also suggest that the age donot strongly differentiate who survived 5 years or more and those who did not.
+
+
+### scatterplot
+```{r}
+
+ggplot(df, aes(x = Node, y = 0, fill= factor(survival_status), colour = factor(survival_status))) + 
+  geom_jitter(alpha = .5, height = .1)+
+  labs(title = "Number of axillary node by survival",
+         x= "Number of positive Node by survival",
+         y= "Count")+ 
+  scale_fill_manual(values = c("red", "green"), labels = c("survived 5 years or more than 5 years", "Died within 5 years"))+
+  theme_minimal()
+
+
+```
+
+Scatter plot : The Scatter plot the distribution of the positive Axillary Node with respect to Survival status. The plot suggest that the number of postivie node have a stronger association with survival rate, as the patient survived 5 or more years tend to have fewer number of positive nodes, while those who died within 5 years often have a high count of positive node.
+
+
+
+### Boxplot for Node with respect to survival status
+
+```{r}
+
+ggplot(df, aes(x = factor(survival_status), y = Node, fill = factor(survival_status))) + 
+    geom_boxplot()+
+    labs(title = "Survival status by Node",
+         x = "Survival",
+         y = "Node")+ 
+    scale_fill_manual(values = c("red", "green"), labels = c("survived 5 years or more than 5 years", "Died within 5 years"))
+```
+
+BoxPlot : The box plot shows whether there are outliers in Nodes with respect to survivial status.The black dots above the boxplot show that there are outliers in node(eg : no of node in one person is 53 and the mean/avg no nodes in entire dataset is 4).
+
+
+
+
+
+### Yearwise survival Count
+
+```{r}
+survived <- df %>%
+  filter(survival_status == 1)%>%
+  group_by(Year)%>%
+  summarise(survival_count = n())
+
+died <- df %>%
+  filter(survival_status == 2)%>%
+  group_by(Year)%>%
+  summarise(died_count = n())
+
+
+plot_survived <- ggplot(survived, aes(x = Year, y = survival_count)) +
+  geom_line(color = "green", size = 1) +
+  geom_point(color = "green", size = 2) +
+  labs(title = "Year-wise Count of Patients who Survived 5 Years or Longer",
+       x = "Year",
+       y = "Number of Survivors") +
+  scale_x_continuous(limits = c(57,70), breaks = seq(57, 70, by = 5))+
+  theme_minimal()
+
+# Plot for non-survivors
+plot_died <- ggplot(died, aes(x = Year, y = died_count)) +
+  geom_line(color = "red", size = 1) +
+  geom_point(color = "red", size = 2) +
+  labs(title = "Year-wise Count of Patients who Died Within 5 Years",
+       x = "Year",
+       y = "Number of Deaths") +
+  scale_x_continuous(limits = c(57,70), breaks = seq(57, 70, by = 5))+
+  theme_minimal()
+grid.arrange(plot_survived, plot_died, ncol = 1)
+
+```
+
+
+The line chart Displays the year-wise survivial and mortality among the patient over a specific period of time.
+  1. The 1st plot shows the number of patients survived 5 years or longer with green line and the point highlits the count for each year
+  2. The 2nd plot shows the number of patients Died 5  with red line and the point highlits the count for each year.
+
+
+### Year-wise Survivial percentage
+
+```{r}
+total_patient <- df %>%
+  group_by(Year)%>%
+  summarise(total_count = n())
+
+survived <- df %>%
+  filter(survival_status == 1)%>%
+  group_by(Year)%>%
+  summarise(survival_count = n())
+died <- df %>%
+  filter(survival_status == 2)%>%
+  group_by(Year)%>%
+  summarise(died_count = n())
+
+survival_rate <- merge(total_patient, survived, by = "Year")
+survival_rate <- survival_rate%>%
+  mutate(survivalRate = (survival_count/total_count)*100)
+
+mortalityrate <- merge(survival_rate, died, by= "Year")
+mortalityrate <- mortalityrate%>%
+  mutate(Mortality = (died_count/total_count)*100)
+mortalityrate
+
+survived <- ggplot(survival_rate, aes(x = Year, y = survivalRate)) +
+  geom_line(color = "green", size = 1) +
+  geom_point(color = "green", size = 2) +
+  labs(title = "Year-wise percentage of Patients who Survived 5 Years or Longer",
+       x = "Year",
+       y = "percentage survived") +
+  scale_x_continuous(limits = c(57, 70), breaks = seq(57, 70, by = 5)) +
+  scale_y_continuous(limits = c(50, 90), breaks = seq(50,90, by = 5))+
+  theme_minimal()
+
+died <- ggplot(mortalityrate, aes(x= Year, y = Mortality)) +
+  geom_line(color = "red", size=1)+
+  geom_point(color = "red", size = 2)+
+  labs(title = "yearwise percentage of death by breast cancer ", 
+       x= "Year",
+       y = "Death percentage")+
+  scale_x_continuous(limits = c(57,70), breaks = seq(57, 70, by = 5))+
+  scale_y_continuous(limits = c(9, 50), breaks = seq(0, 50, by = 5))+
+  theme_minimal()
+
+grid.arrange(survived, died, ncol = 1)
+
+```
+
+
+The line chart Displays the year-wise survivial and mortality Percentage among the patient over a specific period of time.
+  1. The 1st plot shows the number of patients survived 5 years or longer with green line and the point highlits the percentage for each year
+  2. The 2nd plot shows the number of patients Died 5  with red line and the point highlits the percentage for each year.
+
+
+
+## Preprocessing the survival_dataset
+
+### Null Values checking
+```{r}
+sum(is.null(df))
+```
+There are no null values in the dataset.
+
+### outlier detection
+```{r}
+age <- ggplot(df, aes(x= "", y = Age)) + geom_boxplot(fill = "lightblue")+labs(title = "boxplot of AGE") 
+year <- ggplot(df, aes(x= "", y = Year)) + geom_boxplot(fill = "lightblue")+labs(title = "boxplot of Year") 
+node <- ggplot(df, aes(x= "", y = Node)) + geom_boxplot(fill = "lightblue")+labs(title = "boxplot of Axillary Node") 
+survival <- ggplot(df, aes(x= factor(survival_status), y = Age)) + geom_boxplot(fill = "lightblue")+labs(title = "boxplot of Survivalstatus") 
+grid.arrange(age, year, node, survival, nrow=2, ncol= 2)
+```
+
+
+# Removing outliers
+
+```{r}
+q1 <- quantile(df$Node, 0.25)
+q3 <- quantile(df$Node, 0.75)
+IQR_ <- q3 - q1
+
+lower_bound <- q1 - 1.5 * IQR_
+upper_bound <- q3 + 1.5 * IQR_
+outliers<- (df$Node < lower_bound | df$Node > upper_bound)
+sum(outliers)
+
+df_cleaned <- df[!outliers,]
+nrow(df_cleaned)
+
+```
+
+
+
+```{r}
+corrplot(cor(df_cleaned), method = "number")
+```
+correlation with survival status is low for every variable.
+
+
+
+```{r}
+df_cleaned$survival_status <- ifelse(df_cleaned$survival_status == 1, 1, 0)
+# to make survived as 1 and not survived as 0
+```
+
+
+## scaling the variable
+
+```{r}
+
+
+df_cleaned$Age <- scale(df_cleaned$Age)
+df_cleaned$Node <- scale(df_cleaned$Node)
+df_cleaned$Year <- scale(df_cleaned$Year)
+head(df_cleaned)
+```
+
+Scaling helps the different scaled varibles into single scale, which helps in faster convergence.
+
+
+## ANN
+
+### spliting the Data
+```{r}
+index <- sample(1 : nrow(df_cleaned), round(.70 * nrow(df_cleaned)))
+trainset <- df_cleaned[index, ]
+testset <- df_cleaned[-index, ]
+
+```
+
+## Model Selection
+
+### architecture of simple Neural Network
+  Number of layers : the dataset contain only 266 rows so a deep neural network might overfit. A simple architecture                        with fewer layer(1-2 layers) generally prefered .
+  Number of Neuron perlayer : too many neuron can lead to overfitting. For a smaller Dataset 5 - 10 neurons are                                     prefereable.
+
+### Loss Function
+  For a Binary classification problem , binary cross entropy is the Standard Loss, it measure the difference between actual and predicted probabilities which makes it suitable for binary classification task.
+  
+### hyper parameters
+  1. Learning Rate : controls how much to adjust the weights with respect to gradient.But here in neuralnet library the learning rate is default.
+  2. hidden Layer : number of hidden layer between input layer and output layer too many hidden layer can cause overfitting so we use 1 or 2 layer because the size the dataset is small.
+  3. threshold : Its is a stopping criterion for training, it determines the minimal accepetble improve in the error function.
+  4. stepmax : sepcify the maximum number of steps that the training algorithm will perfome.It effectivly limits the number of weight updatesduring the training.
+  
+  
+### key matrices for confusion matrix
+
+  Accuracy : measure the proportion of correctly classified out of total instance
+             Higher value close to 1 are better.
+             
+  Sensitivity : Measure the proportion of actual positive that are correctly classified. 
+                Higher value close to 1 are best.
+                
+  Specificity : measure the proportion of actual negative that are correctly classified.
+                Higher value close to 1 are better
+                
+  Positive predicted value : Measure of predicted positive that are actually positive. A higer value is good.
+  
+  
+
+## neural network -1
+
+
+This code snippet below setup a neural network with one hidden layer contain 5 node.The network trying to predict 'survival_status' of patient (dependend variable)  using 'Age',  'Node' , 'Year' (independent variable) of the patient as inputs. Threshold parameter  is set to 0.01 to control the training process.
+
+```{r}
+set.seed(123)
+hiden_layer <- c(5)
+nn <- neuralnet(survival_status ~ Age + Node + Year, data = trainset, hidden = hiden_layer, threshold = 0.01)
+```
+
+
+```{r}
+input_test <- as.matrix(testset[, c("Age", "Year", "Node")])
+output_test <-testset$survival_status
+
+predict1 <- predict(nn, input_test)
+
+predict_output<- ifelse(predict1 >0, 1, 0)
+accuracy1 <- sum(predict_output == output_test)/ length(output_test)
+
+print(paste("accuracy : ", round(accuracy1 * 100, 2), "%"))
+
+confusion_matrix_1 <- confusionMatrix(as.factor(predict_output), as.factor(output_test))
+print(confusion_matrix_1)
+
+```
+
+
+
+
+## neural network -2
+
+This code snippet below setup a neural network with one hidden layer contain 7 node.The network trying to predict 'survival_status' of patient (dependend variable)  using 'Age',  'Node' , 'Year' (independent variable) of the patient as inputs.Here we use Binary_cross_entropy as loss function.Threshold parameter  is set to 0.01 to control the training process.
+
+```{r}
+set.seed(123)
+hiden_layer <- c(7)
+nn1 <- neuralnet(survival_status ~ Age + Node + Year, data = trainset, hidden = hiden_layer, threshold = 0.01, linear.output = FALSE)
+
+predict2 <- predict(nn1, input_test)
+
+predict_output<- ifelse(predict2 >.5, 1, 0)
+accuracy2 <- sum(predict_output == output_test)/ length(output_test)
+
+print(paste("accuracy : ", round(accuracy2 * 100, 2), "%"))
+
+confusion_matrix_1 <- confusionMatrix(as.factor(predict_output), as.factor(output_test))
+print(confusion_matrix_1)
+
+```
+
+## neural network -3
+
+This code snippet below setup a neural network with one hidden layer contain 7 node.The network trying to predict 'survival_status' of patient (dependend variable)  using 'Age',  'Node' , 'Year' (independent variable) of the patient as inputs.Here we use sigmoid function  as activation function.Threshold parameter  is set to 0.01 to control the training process.
+
+```{r}
+set.seed(123)
+hiden_layer <- c(5,7)
+nn2 <- neuralnet(survival_status ~ Age + Node + Year, data = trainset, hidden = hiden_layer, threshold = 0.01, linear.output = FALSE,act.fct = "logistic")
+
+predict3 <- predict(nn2, input_test)
+#predict
+
+predict_output<- ifelse(predict3 >.5, 1, 0)
+accuracy3 <- sum(predict_output == output_test)/ length(output_test)
+
+print(paste("accuracy : ", round(accuracy3 * 100, 2), "%"))
+
+confusion_matrix_1 <- confusionMatrix(as.factor(predict_output), as.factor(output_test))
+print(confusion_matrix_1)
+
+```
+
+# Conclusion
+
+After perfoming preprocessing, Exploratory Data Analysis (EDA) and developing neural network model for Haberman Survivial Dataset, it observed that the correlation between the features("Age" , "Node" , "Year") and the target variable are very low. specially the correlation values are ranging from (-0.0078 to .2868) which is indicates  a weak linear realtionship between predictiors and the outcome.
+
+Additionally, the dataset consists of only 306 rows, which is relatively small. This limited sample size may contribute to the challenges in achieving high predictive performance, as the model may not have sufficient data to learn complex patterns effectively.
+
+These factors—the weak feature correlations and the small dataset size—suggest that the highest achievable accuracy might be constrained by the inherent limitations of the dataset. Therefore, it is reasonable to conclude that improvements in predictive performance beyond the current accuracy levels may be challenging. Future work could focus on exploring different datasets, advanced feature engineering, or more sophisticated modeling approaches to enhance predictive accuracy.
+
+
+
