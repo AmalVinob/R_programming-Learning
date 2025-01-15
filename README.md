@@ -122,7 +122,7 @@ This repository is primarily for personal learning, but contributions are welcom
 <h2>📬 Connect with Me</h2>
 <p>If you have feedback, suggestions, or just want to connect, reach out to me:</p>
 <ul>
-  <li><strong>LinkedIn:</strong> <a href="https://www.linkedin.com/in/amalvinob/" target="_blank">Your LinkedIn Profile</a></li>
+  <li><strong>LinkedIn:</strong> <a href="https://www.linkedin.com/in/amalvinob/" target="_blank">MY LinkedIn Profile</a></li>
 </ul>
 
 <p align="center"><strong>Happy Clustering in R! 😊</strong></p>
